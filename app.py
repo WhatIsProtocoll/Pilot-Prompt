@@ -6,40 +6,18 @@ import tempfile
 from transformers import WhisperProcessor, WhisperForConditionalGeneration
 from pydub import AudioSegment
 import torchaudio.transforms as T
+from icao_rules import generate_response, normalize_text_to_callsign, extract_context_from_transcript
 
-torchaudio.set_audio_backend("soundfile")
-
+# Modell
 MODEL_ID = "jlvdoorn/whisper-small-atcosim"
-
 processor = WhisperProcessor.from_pretrained(MODEL_ID)
 model = WhisperForConditionalGeneration.from_pretrained(MODEL_ID)
 model.eval()
 
-ICAO_TO_LETTER = {
-    "alfa": "A", "bravo": "B", "charlie": "C", "delta": "D", "echo": "E",
-    "foxtrot": "F", "golf": "G", "hotel": "H", "india": "I", "juliett": "J",
-    "kilo": "K", "lima": "L", "mike": "M", "november": "N", "oscar": "O",
-    "papa": "P", "quebec": "Q", "romeo": "R", "sierra": "S", "tango": "T",
-    "uniform": "U", "victor": "V", "whiskey": "W", "x-ray": "X",
-    "yankee": "Y", "zulu": "Z"
-}
-
-def normalize_text_to_callsign(text):
-    words = text.lower().split()
-    callsign_raw = ""
-    for word in words:
-        if word in ICAO_TO_LETTER:
-            callsign_raw += ICAO_TO_LETTER[word]
-        elif word in ["dash", "hyphen"]:
-            callsign_raw += "-"
-        elif len(word) == 1:
-            callsign_raw += word.upper()
-    return callsign_raw
-
 def load_audio(audio_path, target_sr=16000):
     try:
         waveform, sample_rate = torchaudio.load(audio_path)
-    except Exception as e:
+    except Exception:
         audio = AudioSegment.from_file(audio_path)
         with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
             audio.export(tmp.name, format="wav")
@@ -48,61 +26,36 @@ def load_audio(audio_path, target_sr=16000):
 
     if sample_rate != target_sr:
         waveform = T.Resample(orig_freq=sample_rate, new_freq=target_sr)(waveform)
-        sample_rate = target_sr
+    return waveform, target_sr
 
-    return waveform, sample_rate
+# Platzhalter für ML-basierten Fallback (z. B. GPT API)
+def ml_fallback_handler(transcript, callsign):
+    return f"⚠️ Kein ICAO-Muster erkannt.\n\n📝 Vorschlag basierend auf Freitext: '{transcript}'"
 
-def detect_intent(text, callsign):
-    normalized_text = normalize_text_to_callsign(text)
-    norm_callsign = callsign.replace("-", "").lower()
-    norm_text = normalized_text.replace("-", "").replace(" ", "").lower()
-
-    if norm_callsign not in norm_text:
-        return None, normalized_text
-
-    text = text.lower()
-    if "cleared to land" in text:
-        return "landing_clearance", normalized_text
-    if "cleared for takeoff" in text:
-        return "takeoff_clearance", normalized_text
-    if "contact tower" in text or "change frequency" in text:
-        return "frequency_change", normalized_text
-    if "squawk" in text:
-        return "squawk_assignment", normalized_text
-    return "unknown", normalized_text
-
-def generate_response(intent, callsign, runway="27"):
-    if intent == "landing_clearance":
-        return f"{callsign}, roger, cleared to land runway {runway}"
-    if intent == "takeoff_clearance":
-        return f"{callsign}, ready for departure runway {runway}"
-    if intent == "frequency_change":
-        return f"{callsign}, switching frequency, goodbye"
-    if intent == "squawk_assignment":
-        return f"{callsign}, squawk set, thank you"
-    return "Keine Standardantwort gefunden."
-
+# Hauptlogik
 def process_input(audio, callsign):
-    if audio is None or callsign == "":
+    if audio is None or callsign.strip() == "":
         return "Keine Eingabe erhalten.", "", ""
 
-    tmp_path = audio  # audio ist jetzt ein Pfad, keine Binärdaten mehr
-    waveform, sample_rate = load_audio(tmp_path)
-    inputs = processor(waveform.squeeze(), sampling_rate=sample_rate, return_tensors="pt")
-
+    waveform, sample_rate = load_audio(audio)
+    inputs = processor(waveform.squeeze(), sampling_rate=sample_rate, return_tensors="pt", language="en")
     with torch.no_grad():
-        predicted_ids = model.generate(inputs.input_features)
+        attention_mask = inputs.get("attention_mask", None)
+        predicted_ids = model.generate(inputs.input_features, attention_mask=attention_mask)
     transcription = processor.batch_decode(predicted_ids, skip_special_tokens=True)[0]
 
-    intent, norm_text = detect_intent(transcription, callsign)
-    if intent:
-        response = generate_response(intent, callsign)
+    context = extract_context_from_transcript(transcription)
+    response = generate_response(transcription, callsign, context)
+
+    if response is None:
+        norm_text = normalize_text_to_callsign(transcription)
+        response = ml_fallback_handler(transcription, callsign)
     else:
-        response = "Keine relevante Nachricht für dein Rufzeichen erkannt."
+        norm_text = normalize_text_to_callsign(transcription)
 
     return transcription, norm_text, response
 
-# Gradio UI
+# UI
 demo = gr.Interface(
     fn=process_input,
     inputs=[
@@ -111,11 +64,11 @@ demo = gr.Interface(
     ],
     outputs=[
         gr.Textbox(label="📝 Transkription"),
-        gr.Textbox(label="🔍 Erkanntes Rufzeichen im Transkript"),
+        gr.Textbox(label="📛 Erkanntes Rufzeichen (aus Transkript)"),
         gr.Textbox(label="💬 Antwortvorschlag")
     ],
-    title="🛫 Flugfunk Transkription & Antwort",
-    description="Sprich deinen ATC-Funkspruch direkt ins Mikrofon und erhalte sofort eine Antwortempfehlung.",
+    title="🛫 Flugfunk ATC-Parser",
+    description="Regelbasiertes ICAO-Funkanalyse-Tool mit Fallback auf ML-Modell bei unbekannten Funksprüchen.",
     live=False
 )
 
