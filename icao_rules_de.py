@@ -1,57 +1,146 @@
 # icao_rules_de.py
 
-# icao_rules_de.py
-
 ICAO_RULES_DE = {
-    "freigabe_erbeten": {
+    "einladung_vorfeld": {
         "patterns": [
-            "erbitte freigabe", "anfrage freigabe", "freigabe erbeten"],
-        "response": lambda cs, ctx={}: f"Freigabe erteilt nach {ctx.get('ziel', 'Zielort')} über {ctx.get('sid', 'SID')}, Squawk {ctx.get('squawk', 'XXXX')} — {cs}"
+            "erbitte abfluginformationen"],
+        "response": lambda cs, vorfeld, ctx={}: f"{vorfeld} – {cs}"
+    },
+    
+    "anmeldung_vorfeld": {
+        "patterns": [
+            "erbitte rollinformationen"],
+        "response": lambda cs, airplane_type, num_pax, dep, arr, position, ctx={}: f"{cs}, {airplane_type}, {num_pax} Personen, VFR-Flug von {dep} nach {arr}, an {position}, erbitte Rollinformationen"
     },
 
     "rollfreigabe": {
         "patterns": [
-            "rollfreigabe", "erbitte rollen", "rolle zur startbahn"],
-        "response": lambda cs, ctx={}: f"Rollen Sie zu Haltepunkt {ctx.get('punkt', 'C')}, Piste {ctx.get('runway', '27')} — {cs}"
+            "rollen sie", "QNH", "Piste", "in Benutzung"],
+        "response": lambda cs, Piste, QNH, ctx={}: f"Rolle zum Rollhalt der Piste {Piste}, QNH {QNH} — {cs}"
+    },
+
+    "einladung_twr": {
+        "patterns": [
+            "erbitte abfluginformationen"],
+        "response": lambda cs, twr, ctx={}: f"{twr} – {cs}"
+    },
+
+    "abflugbereit": {
+        "patterns": [
+            "Radio", "Info"],
+        "response": lambda cs, Piste, report, ctx={}: f" {cs}, abflugbereit am Rollhalt der Piste {Piste}, zum Abflug über {report} "
     },
 
     "startfreigabe": {
         "patterns": [
-            "start frei", "startfreigabe erteilt", "startbahn frei"],
-        "response": lambda cs, ctx={}: f"Startbahn {ctx.get('runway', '27')}, Start frei — {cs}"
+            "start frei", "freigabe zum start", "piste frei zum start"],
+        "response": lambda cs, Piste, ctx={}: f"Piste {Piste} Start frei — {cs}"
     },
 
-    "lande_freigabe": {
+    "abmeldung_twr": {
         "patterns": [
-            "landung frei", "freigabe zur landung", "piste frei zur landung"],
-        "response": lambda cs, ctx={}: f"Landung frei auf Piste {ctx.get('runway', '27')} — {cs}"
+            "erbitte abfluginformationen"],
+        "response": lambda cs, report, ctx={}: f"{cs} am Ende der {report} Strecke. Erbitte Verlassen der Frequenz zum Melden bei FIS."
     },
 
-    "frequenzwechsel": {
+    "squawk_info": {
         "patterns": [
-            "wechsel auf frequenz", "kontaktieren sie tower", "wechseln auf"],
-        "response": lambda cs, ctx={}: f"Wechseln Sie auf {ctx.get('frequency', '118.5')} — {cs}"
+            "Squawk 7000", "Transpondercode 7000", "Transpondercode 7 0 0 0"],
+        "response": lambda cs, squawk, ctx={}: f" Squawk {squawk} – {cs}"
     },
 
-    "frequenz_neu_anruf": {
+    "einladung_fis": {
         "patterns": [
-            "kontaktaufnahme", "anruf neue frequenz", "funkkontakt neu"],
-        "response": lambda cs, ctx={}: f"{cs}, Funkkontakt hergestellt"
+            "erbitte abfluginformationen"],
+        "response": lambda cs, fis, ctx={}: f"{fis} – {cs}"
     },
 
-    "squawk_code": {
+    "anmeldung_fis": {
         "patterns": [
-            "squawk", "transpondercode", "stellen sie code ein"],
-        "response": lambda cs, ctx={}: f"Squawk {ctx.get('squawk', '7000')} gesetzt — {cs}"
+            "erbitte rollinformationen"],
+        "response": lambda cs, airplane_type, num_pax, dep, arr, report, alt, ctx={}: f"{cs}, {airplane_type}, {num_pax} Personen, VFR-Flug von {dep} nach {arr}, soeben {report} Strecke verlassen in {alt} Fuß Höhe, erbitte Verkehrsinformationen"
+    },
+
+    "verkehrsinformationen": {
+        "patterns": [
+            "identifiziert", "Squawk", "Transponder", "QNH"],
+        "response": lambda cs, QNH, squawk, ctx={}: f"QNH {QNH}, Squawk {squawk} – {cs}."
+    },
+
+    "frequency_change": {
+        "patterns": [
+            "wechseln sie auf", "wechseln sie zu", "wechseln sie auf die frequenz"],
+        "response": lambda cs, fis2, ctx={}: f"Wechsel auf {fis2} – {cs}."
+    },
+
+    "abmeldung_fis": {
+        "patterns": [
+            "verlassen"],
+        "response": lambda cs, arr, ctx={}: f"{cs} Erbitte Verlassen der Frequenz zum Melden in {arr} "
+    },
+
+    "einladung_arr": {
+        "patterns": [
+            "erbitte abfluginformationen"],
+        "response": lambda cs, arr_info, ctx={}: f"{arr_info} – {cs}"
+    },
+
+    "anmeldung_arr_info": {
+        "patterns": [
+            "Info", "Radio"],
+        "response": lambda cs, airplane_type, num_pax, dep, arr, position, alt, report, ctx={}: f"{cs}, {airplane_type}, {num_pax}, VFR-Flug von {dep} nach {arr}, {position} vom Flugplatz, in {alt} Fuß Höhe, zur Landung über {report} ",
+    },
+
+    "anflug_frei": {
+        "patterns": [
+            "identifiziert", "Anflug", "Squwak"],
+        "response": lambda cs, squawk, ctx={}: f" Squawk {squawk} — {cs}"
+    },
+
+    "report_point": {
+        "patterns": [
+            "Höhe", "Fuß", "stellen sie code ein"],
+        "response": lambda cs, report, alt, ctx={}: f"{cs} über {report} in {alt} Fuß Höhe, melde Queranflug"
     },
 
     "durchstarten": {
         "patterns": [
             "durchstarten", "go around", "abbrechen landung"],
-        "response": lambda cs, ctx={}: f"Durchstarten, melden Sie Queranflug — {cs}"
+        "response": lambda cs, ctx={}: f" {cs} – startet durch."
     }
 }
 
+PHASE_MAPPING = {
+    "einladung_vorfeld": "Pre-Start / Taxi",
+    "anmeldung_vorfeld": "Pre-Start / Taxi",
+    "rollfreigabe": "Pre-Start / Taxi",
+
+    "einladung_info": "Departure / Takeoff",
+    "abflugbereit": "Departure / Takeoff",
+    "startfreigabe": "Departure / Takeoff",
+    "abmeldung_twr": "Departure / Takeoff",
+    "squawk_info": "Departure / Takeoff",
+
+    "einladung_fis": "Enroute / Cruise",
+    "anmeldung_fis": "Enroute / Cruise",
+    "verkehrsinformationen": "Enroute / Cruise",
+    "abmeldung_fis": "Enroute / Cruise",
+    #"frequency_change": "Enroute / Cruise",
+    "squawk_info": "Enroute / Cruise",
+
+    "einladung_arr": "Arrival / Traffic Circuit",
+    "anmeldung_arr_info": "Arrival / Traffic Circuit",
+    "anflug_frei": "Arrival / Traffic Circuit",
+    "report_point": "Arrival / Traffic Circuit",
+    "durchstarten": "Arrival / Traffic Circuit"
+}
+
+PHASE_ORDER = [
+    "Pre-Start / Taxi",
+    "Departure / Takeoff",
+    "Enroute / Cruise",
+    "Arrival / Traffic Circuit"
+]
 
 NUMBER_WORDS_DE = {
     "null": "0",

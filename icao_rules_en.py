@@ -4,33 +4,35 @@ import re
 ICAO_RULES_EN = {
     "clearance_request": {
         "patterns": [
-            "request clearance",
-            "standby for clearance",
-            "request IFR clearance"
+            "cleared to"
         ],
-        "response": lambda cs, ctx={}: f"{cs}, cleared to {ctx.get('destination', 'destination')} via {ctx.get('sid', 'SID')}, squawk {ctx.get('squawk', 'XXXX')}"
+        "response": lambda cs, ctx={}: f"Cleared to {ctx.get('destination', 'destination')} via {ctx.get('sid', 'SID')}, squawk {ctx.get('squawk', 'XXXX'), {cs}}"
     },
     "startup_request": {
         "patterns": [
-            "request startup",
             "startup approved"
         ],
-        "response": lambda cs, ctx={}: f"{cs}, startup approved, contact ground on {ctx.get('frequency', '121.9')}"
+        "response": lambda cs, ctx={}: f"Startup approved, contact ground on {ctx.get('frequency', '121.9'), {cs}}"
     },
     "taxi_clearance": {
         "patterns": [
-            "request taxi",
             "taxi to holding point",
             "taxi to runway"
         ],
-        "response": lambda cs, ctx={}: f"{cs}, taxi to holding point {ctx.get('point', 'C')}, runway {ctx.get('runway', '27')}"
+        "response": lambda cs, ctx={}: f"Taxi to holding point {ctx.get('point', 'C')}, runway {ctx.get('runway', '27'), {cs}}"
+    },
+    "tower_frequency": {
+        "patterns": [
+            "contact tower",
+        ],
+        "response": lambda cs, ctx={}: f"Contact Tower on {ctx.get('frequency', '121.9'), {cs}}"
     },
     "takeoff_clearance": {
         "patterns": [
             "cleared for takeoff",
             "line up and wait"
         ],
-        "response": lambda cs, ctx={}: f"{cs}, cleared for takeoff runway {ctx.get('runway', '27')}"
+        "response": lambda cs, ctx={}: f"Cleared for takeoff runway {ctx.get('runway', '27'), {cs}}"
     },
     "landing_clearance": {
         "patterns": [
@@ -38,7 +40,7 @@ ICAO_RULES_EN = {
             "continue approach",
             "final runway"
         ],
-        "response": lambda cs, ctx={}: f"{cs}, roger, cleared to land runway {ctx.get('runway', '27')}"
+        "response": lambda cs, ctx={}: f"Roger, cleared to land runway {ctx.get('runway', '27'), {cs}}"
     },
     "frequency_change": {
         "patterns": [
@@ -46,7 +48,7 @@ ICAO_RULES_EN = {
             "switch to",
             "change frequency"
         ],
-        "response": lambda cs, ctx={}: f"{cs}, switching to {ctx.get('frequency', '118.5')}, goodbye"
+        "response": lambda cs, ctx={}: f"Switching to {ctx.get('frequency', '118.5')}, goodbye, {cs}"
     },
     "squawk_assignment": {
         "patterns": [
@@ -54,14 +56,14 @@ ICAO_RULES_EN = {
             "squawk code",
             "set transponder"
         ],
-        "response": lambda cs, ctx={}: f"{cs}, squawk {ctx.get('squawk', '7000')}"
+        "response": lambda cs, ctx={}: f"Squawk {ctx.get('squawk', '7000'), {cs}}"
     },
     "go_around": {
         "patterns": [
             "go around",
             "going around"
         ],
-        "response": lambda cs, ctx={}: f"{cs}, roger, go around, report downwind"
+        "response": lambda cs, ctx={}: f"Roger, go around, report downwind, {cs}"
     }
 }
 
