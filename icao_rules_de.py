@@ -16,7 +16,7 @@ ICAO_RULES_DE = {
     "rollfreigabe": {
         "patterns": [
             "rollen sie", "QNH", "Piste", "in Benutzung"],
-        "response": lambda cs, Piste, QNH, ctx={}: f"Rolle zum Rollhalt der Piste {Piste}, QNH {QNH} — {cs}"
+        "response": lambda cs, ctx={}: f"Rolle zum Rollhalt der Piste 22, QNH 1013 — {cs}"
     },
 
     "einladung_twr": {
@@ -28,25 +28,25 @@ ICAO_RULES_DE = {
     "abflugbereit": {
         "patterns": [
             "Radio", "Info"],
-        "response": lambda cs, Piste, report, ctx={}: f" {cs}, abflugbereit am Rollhalt der Piste {Piste}, zum Abflug über {report} "
+        "response": lambda cs, ctx={}: f" {cs}, abflugbereit am Rollhalt der Piste 22, zum Abflug über Kilo "
     },
 
     "startfreigabe": {
         "patterns": [
             "start frei", "freigabe zum start", "piste frei zum start"],
-        "response": lambda cs, Piste, ctx={}: f"Piste {Piste} Start frei — {cs}"
+        "response": lambda cs, ctx={}: f"Piste 22 Start frei — {cs}"
     },
 
     "abmeldung_twr": {
         "patterns": [
             "erbitte abfluginformationen"],
-        "response": lambda cs, report, ctx={}: f"{cs} am Ende der {report} Strecke. Erbitte Verlassen der Frequenz zum Melden bei FIS."
+        "response": lambda cs, ctx={}: f"{cs} am Ende der Kilo Strecke. Erbitte Verlassen der Frequenz zum Melden bei FIS."
     },
 
     "squawk_info": {
         "patterns": [
             "Squawk 7000", "Transpondercode 7000", "Transpondercode 7 0 0 0"],
-        "response": lambda cs, squawk, ctx={}: f" Squawk {squawk} – {cs}"
+        "response": lambda cs, ctx={}: f" Squawk 7000 – {cs}"
     },
 
     "einladung_fis": {
@@ -58,13 +58,13 @@ ICAO_RULES_DE = {
     "anmeldung_fis": {
         "patterns": [
             "erbitte rollinformationen"],
-        "response": lambda cs, airplane_type, num_pax, dep, arr, report, alt, ctx={}: f"{cs}, {airplane_type}, {num_pax} Personen, VFR-Flug von {dep} nach {arr}, soeben {report} Strecke verlassen in {alt} Fuß Höhe, erbitte Verkehrsinformationen"
+        "response": lambda cs, airplane_type, num_pax, dep, arr, ctx={}: f"{cs}, {airplane_type}, {num_pax} Personen, VFR-Flug von {dep} nach {arr}, soeben Kilo Strecke verlassen in 2000 Fuß Höhe, erbitte Verkehrsinformationen"
     },
 
     "verkehrsinformationen": {
         "patterns": [
             "identifiziert", "Squawk", "Transponder", "QNH"],
-        "response": lambda cs, QNH, squawk, ctx={}: f"QNH {QNH}, Squawk {squawk} – {cs}."
+        "response": lambda cs, ctx={}: f"QNH 1013, Squawk 7000 – {cs}."
     },
 
     "frequency_change": {
@@ -88,7 +88,7 @@ ICAO_RULES_DE = {
     "anmeldung_arr_info": {
         "patterns": [
             "Info", "Radio"],
-        "response": lambda cs, airplane_type, num_pax, dep, arr, position, alt, report, ctx={}: f"{cs}, {airplane_type}, {num_pax}, VFR-Flug von {dep} nach {arr}, {position} vom Flugplatz, in {alt} Fuß Höhe, zur Landung über {report} ",
+        "response": lambda cs, airplane_type, num_pax, dep, arr, ctx={}: f"{cs}, {airplane_type}, {num_pax}, VFR-Flug von {dep} nach {arr}, 5 Meilen südlich vom Flugplatz, in 3000 Fuß Höhe, zur Landung über Yankee ",
     },
 
     "anflug_frei": {
@@ -100,7 +100,7 @@ ICAO_RULES_DE = {
     "report_point": {
         "patterns": [
             "Höhe", "Fuß", "stellen sie code ein"],
-        "response": lambda cs, report, alt, ctx={}: f"{cs} über {report} in {alt} Fuß Höhe, melde Queranflug"
+        "response": lambda cs, ctx={}: f"{cs} über Yankee in 2000 Fuß Höhe, melde Queranflug"
     },
 
     "durchstarten": {

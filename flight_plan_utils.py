@@ -5,7 +5,6 @@ from collections import OrderedDict
 from shapely.geometry import Point
 import geopandas as gpd
 import json
-import matplotlib.pyplot as plt
 from frequency_retrieval import (get_airport_by_icao, get_frequencies, get_lat_lon, generate_route_points,plot_route_over_fis, get_ordered_frequencies, create_nested_frequency_map, extract_frequency_roles)
 
 # Load geojson for airport and airspace data
@@ -46,7 +45,7 @@ def inject_frequency_transitions(checklist, nested_freqs):
             if info["phase"] == phase:
                 if freq_key != last_freq_name:
                     name, value = freq_key  # unpack the tuple
-                    transition_text = f"👉 Wechsel auf {name}: {value} MHz"
+                    transition_text = f"👉 Change to {name}: {value}"
                     items.insert(0, transition_text)
                     last_freq_name = freq_key
                 break
@@ -55,7 +54,7 @@ def inject_frequency_transitions(checklist, nested_freqs):
 
     return enhanced
 
-def generate_checklist_from_form(cs, airplane_type, num_pax, dep_icao, arr_icao, position, Piste, QNH, report, squawk, alt):
+def generate_checklist_from_form(cs, airplane_type, num_pax, dep_icao, arr_icao, position):
     # Get airport features
     dep_airport = get_airport_by_icao(dep_icao, airport_data)
     arr_airport = get_airport_by_icao(arr_icao, airport_data)
@@ -97,11 +96,6 @@ def generate_checklist_from_form(cs, airplane_type, num_pax, dep_icao, arr_icao,
         "dep": dep_icao,
         "arr": arr_icao,
         "position": position,
-        "Piste": Piste,
-        "QNH": QNH,
-        "report": report,
-        "squawk": squawk,
-        "alt": int(alt),
         "vorfeld": roles.get("vorfeld", ""),
         "info": roles.get("info", ""),
         "fis": roles.get("fis", ""),
