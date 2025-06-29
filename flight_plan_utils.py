@@ -6,6 +6,7 @@ from shapely.geometry import Point
 import geopandas as gpd
 import json
 from frequency_retrieval import (get_airport_by_icao, get_frequencies, get_lat_lon, generate_route_points,plot_route_over_fis, get_ordered_frequencies, create_nested_frequency_map, extract_frequency_roles)
+import api_frequencies
 
 # Load geojson for airport and airspace data
 with open("openaip_data/de_apt.geojson", "r") as file:
@@ -63,8 +64,13 @@ def generate_checklist_from_form(cs, airplane_type, num_pax, dep_icao, arr_icao,
         return "Error: Could not retrieve one or both airport features."
 
     # Extract frequencies
-    dep_freqs = get_frequencies(dep_airport)
-    arr_freqs = get_frequencies(arr_airport)
+   
+    dep_freqs = api_frequencies.get_freqs_from_api(dep_icao)
+    arr_freqs = api_frequencies.get_freqs_from_api(arr_icao)
+    print(dep_freqs)
+    print(arr_freqs)
+
+
 
     # Generate route and enroute frequencies
     start = Point(*get_lat_lon(dep_airport))

@@ -15,7 +15,7 @@ from flight_plan_utils import generate_checklist_from_form
 
 
 # Model setup
-MODEL_ID = "tclin/distil-large-v3.5-atcosim-finetune"
+MODEL_ID = "tclin/whisper-large-v3-turbo-atcosim-finetune"
 processor = WhisperProcessor.from_pretrained(MODEL_ID)
 model = WhisperForConditionalGeneration.from_pretrained(MODEL_ID)
 model.generation_config.forced_decoder_ids = None
