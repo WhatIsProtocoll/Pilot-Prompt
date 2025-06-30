@@ -57,28 +57,34 @@ def inject_frequency_transitions(checklist, nested_freqs):
 
 def generate_checklist_from_form(cs, airplane_type, num_pax, dep_icao, arr_icao, position):
     # Get airport features
-    dep_airport = get_airport_by_icao(dep_icao, airport_data)
-    arr_airport = get_airport_by_icao(arr_icao, airport_data)
+    dep_airport = api_frequencies.get_airport_info(dep_icao)
+    arr_airport = api_frequencies.get_airport_info(arr_icao)
 
     if not dep_airport or not arr_airport:
         return "Error: Could not retrieve one or both airport features."
 
+    dep_coords = dep_airport["geometry"]["coordinates"]
+    arr_coords = arr_airport["geometry"]["coordinates"]
+
+    print("DEBUG dep_coords:", dep_coords, "arr_coords:", arr_coords)
+
     # Extract frequencies
-   
     dep_freqs = api_frequencies.get_freqs_from_api(dep_icao)
     arr_freqs = api_frequencies.get_freqs_from_api(arr_icao)
-    print(dep_freqs)
-    print(arr_freqs)
-
-
+    print("DEBUG dep_freqs:", dep_freqs, "arr_freqs:", arr_freqs)
 
     # Generate route and enroute frequencies
-    start = Point(*get_lat_lon(dep_airport))
+    # start = Point(*get_lat_lon(dep_airport))
+    start = Point(dep_coords[0], dep_coords[1])
     print(f"Departure Frequencies: {dep_freqs}")
-    end = Point(*get_lat_lon(arr_airport))
+
+    # end = Point(*get_lat_lon(arr_airport))
+    end = Point(arr_coords[0], arr_coords[1])
     print(f"Arrival Frequencies: {arr_freqs}")
+    
     route_points = generate_route_points(start, end)
     enroute_freqs = get_ordered_frequencies(route_points, airspaces)
+    
     print("Nested Frequency List:")
     for (name, value), info in enroute_freqs.items():
         print(f"{name} ({value} MHz): used during {info['phase']}")

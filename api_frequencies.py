@@ -26,18 +26,28 @@ else:
     print("Error:", response.status_code, response.text)
  """
 
-def get_freqs_from_api(icao):
-    
+def get_airport_info(icao: str):
     resp = requests.get(
         BASE_URL,
-        params={"icaoCode": icao},
-        headers={"x-openaip-api-key": API_KEY, "Accept": "application/json"}
+        params={"icaoCode": icao.upper()},
+        headers={"x-openaip-api-key": API_KEY, "Accept": "application/json"},
     )
-    
+    #print("DEBUG resp status:", resp.status_code)
+    #print("DEBUG resp json:", resp.json())
     resp.raise_for_status()
     items = resp.json().get("items", [])
-    
-    if not items:
+    print(f"DEBUG {icao} response items:", json.dumps(data.get("items", []), indent=2))
+    return items[0] if items else None
+
+def get_freqs_from_api(icao: str) -> dict[str, str]:
+    # Return {frequency_name: 'value MHz'} or {}.
+    info = get_airport_info(icao)
+    if not info:
         return {}
-    
-    return {f["name"]: f"{f['value']} MHz" for f in items[0].get("frequencies", [])}
+    freqs = {}
+    for f in info.get("frequencies", []):
+        val = f.get("value")
+        name = f.get("name", "").strip()
+        if name and val:
+            freqs[name] = f"{val} MHz"
+    return freqs
