@@ -141,32 +141,28 @@ def safe_parse_frequencies(freq_data):
 # This function extracts specific frequency roles based on common patterns
 def extract_frequency_roles(dep_freqs, arr_freqs, enroute_freqs):
     roles = {
-    "vorfeld": "",
-    "info": "",
-    "fis": "",
-    "fis2": "",
-    "arr_info": ""
+    "vorfeld": None,
+    "info": None,
+    "fis": [],
+    "arr_info": None
     }
     vorfeld_fallback = None
 
     # Pre-start: look for vorfeld, fallback to info or radio
-    for name in dep_freqs:
+    for name, freq in dep_freqs.items():
         upper = name.upper()
 
         if "VORFELD" in upper or "GROUND" in upper:
-            roles["vorfeld"] = name
+            roles["vorfeld"] = (name, freq)
         elif "INFORMATION" in upper and "LANGEN" not in upper:
-            roles["info"] = roles["info"] or name  # Prefer first match
-            if not vorfeld_fallback:
-                vorfeld_fallback = name
-        elif "RADIO" in upper:
-            if not vorfeld_fallback:
-                vorfeld_fallback = name
+            roles["info"] = (name, freq)
+        elif "RADIO" in upper and roles["info"] is None:
+            roles["info"] = (name, freq)
 
     # Apply fallback only if no vorfeld found
     if not roles["vorfeld"] and vorfeld_fallback:
         roles["vorfeld"] = vorfeld_fallback
-
+    """ 
     # Tower or info for departure
     for name in dep_freqs:
         upper = name.upper()
@@ -174,24 +170,18 @@ def extract_frequency_roles(dep_freqs, arr_freqs, enroute_freqs):
             roles["info"] = name
         elif "TOWER" in upper or "RADIO" in upper:
             roles.setdefault("info", name)
-
-    # FIS / enroute frequencies
-    fis_names = []
-    for name_tuple in enroute_freqs:
-        name_str = name_tuple[0]  # unpack ("name", "value")
-        if "LANGEN" in name_str.upper() or "FIS" in name_str.upper():
-            roles["fis"] = name_str
-
-    if fis_names:
-        roles["fis"] = fis_names[0]
-        if len(fis_names) > 1:
-            roles["fis2"] = fis_names[1]
+    """
+    # FIS / enroute frequencies    
+    for (name, freq), info in enroute_freqs.items():
+        upper = name.upper()
+        if "LANGEN" in upper or "FIS" in upper:
+            roles["fis"].append((name, info["frequency"]))
 
     # Arrival: look for radio/info from arrival field
-    for name in arr_freqs:
+    for (name, freq) in arr_freqs.items():
         upper = name.upper()
         if "RADIO" in upper or "INFO" in upper:
-            roles["arr_info"] = name
+            roles["arr_info"] = (name, freq)
             break
 
     return roles

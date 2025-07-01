@@ -29,14 +29,18 @@ else:
 def get_airport_info(icao: str):
     resp = requests.get(
         BASE_URL,
-        params={"icaoCode": icao.upper()},
+        params={
+            "search": icao.upper(),
+            "limit": 1,
+            "page": 1
+            },
         headers={"x-openaip-api-key": API_KEY, "Accept": "application/json"},
     )
     #print("DEBUG resp status:", resp.status_code)
     #print("DEBUG resp json:", resp.json())
     resp.raise_for_status()
     items = resp.json().get("items", [])
-    print(f"DEBUG {icao} response items:", json.dumps(data.get("items", []), indent=2))
+    #print(f"DEBUG {icao} response items:", json.dumps(items.get("items", []), indent=2))
     return items[0] if items else None
 
 def get_freqs_from_api(icao: str) -> dict[str, str]:

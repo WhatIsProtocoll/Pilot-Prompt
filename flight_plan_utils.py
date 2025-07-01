@@ -66,19 +66,14 @@ def generate_checklist_from_form(cs, airplane_type, num_pax, dep_icao, arr_icao,
     dep_coords = dep_airport["geometry"]["coordinates"]
     arr_coords = arr_airport["geometry"]["coordinates"]
 
-    print("DEBUG dep_coords:", dep_coords, "arr_coords:", arr_coords)
-
     # Extract frequencies
     dep_freqs = api_frequencies.get_freqs_from_api(dep_icao)
     arr_freqs = api_frequencies.get_freqs_from_api(arr_icao)
-    print("DEBUG dep_freqs:", dep_freqs, "arr_freqs:", arr_freqs)
 
     # Generate route and enroute frequencies
-    # start = Point(*get_lat_lon(dep_airport))
     start = Point(dep_coords[0], dep_coords[1])
     print(f"Departure Frequencies: {dep_freqs}")
 
-    # end = Point(*get_lat_lon(arr_airport))
     end = Point(arr_coords[0], arr_coords[1])
     print(f"Arrival Frequencies: {arr_freqs}")
     
@@ -108,11 +103,10 @@ def generate_checklist_from_form(cs, airplane_type, num_pax, dep_icao, arr_icao,
         "dep": dep_icao,
         "arr": arr_icao,
         "position": position,
-        "vorfeld": roles.get("vorfeld", ""),
-        "info": roles.get("info", ""),
-        "fis": roles.get("fis", ""),
-        "fis2": roles.get("fis2", ""),  # optional fallback for enroute switch
-        "arr_info": roles.get("arr_info", "")
+        "vorfeld": roles.get("vorfeld", ("", "")),
+        "info": roles.get("info", ("", "")),
+        "fis": roles.get("fis", []),          # list of (name, freq)
+        "arr_info": roles.get("arr_info", ("", "")),
     }
 
     # Build and enhance checklist
