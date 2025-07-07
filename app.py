@@ -1,4 +1,5 @@
 import gradio as gr
+import numpy as np
 import torch
 import librosa
 import geopandas as gpd
@@ -12,13 +13,23 @@ from transcription_utils import generate_response, normalize_text_to_callsign, e
 from icao_rules_en import ICAO_RULES_EN
 from icao_rules_de import ICAO_RULES_DE
 from flight_plan_utils import generate_checklist_from_form
+from faster_whisper import WhisperModel
 
-
+""" 
 # Model setup
 MODEL_ID = "tclin/whisper-large-v3-turbo-atcosim-finetune"
 processor = WhisperProcessor.from_pretrained(MODEL_ID)
 model = WhisperForConditionalGeneration.from_pretrained(MODEL_ID)
 model.generation_config.forced_decoder_ids = None
+model.generation_config.pad_token_id = model.generation_config.eos_token_id
+ """
+# Real-time setup
+model = WhisperModel(
+    "jacktol/whisper-medium.en-fine-tuned-for-ATC-faster-whisper",
+    device="cpu",
+    compute_type="int8"
+)
+
 
 def load_audio(audio_path):
     # Load and resample to 16000 Hz (Whisper expects 16kHz)
@@ -53,6 +64,33 @@ def process_input(audio, callsign, language):
 
     return transcription, norm_text, response
 
+def live_stream(buffer_list, new_chunk):
+    if new_chunk is None:
+        return buffer_list, ""
+    sr, audio = new_chunk
+
+    if audio.ndim > 1:
+        audio = audio.mean(axis=1)
+    audio = librosa.resample(audio.astype(np.float32), orig_sr=sr, target_sr=16000)
+
+    buffer_list.append(audio)
+    buffer = np.concatenate(buffer_list)
+    max_samps = 15 * 16000
+    if buffer.shape[0] > max_samps:
+        buffer = buffer[-max_samps:]
+        buffer_list = [buffer]
+
+    # Rename returned generator
+    trans_segments, _ = model.transcribe(
+        buffer,
+        beam_size=5, vad_filter=True, language="en"
+    )
+    texts = [segment.text for segment in trans_segments]
+    text = " ".join(texts)
+
+    return buffer_list, text
+
+
 # Fallback logic (e.g., GPT)
 def ml_fallback_handler(transcript, callsign):
     return f"No ICAO phrase matched.\n\nSuggested interpretation: '{transcript}'"
@@ -72,6 +110,34 @@ def checklist_markdown(checklist_dict):
 # First view: Your existing radio transcription assistant
 with gr.Blocks() as demo:
     gr.Markdown("## ATCopilot – Radio Communication Assistant")
+
+
+    with gr.Tab("Live ATC Log"):
+        state = gr.State(value=[])
+
+        with gr.Row():
+            with gr.Column():
+                live_audio = gr.Audio(
+                    sources=["microphone"],
+                    type="numpy",
+                    label="🎙️ Live ATC Input"
+                )
+            with gr.Column():
+                live_output = gr.Textbox(
+                    label="Live Transcript / Log",
+                    lines=10,
+                    interactive=False
+                )
+
+        # Setup streaming event
+        live_audio.stream(
+            fn=live_stream,      # not live_transcribe
+            inputs=[state, live_audio],
+            outputs=[state, live_output],
+            time_limit=600,
+            stream_every=1.0
+)
+
 
     # First Tab: Transcription
     with gr.Tab("Transcription"):
