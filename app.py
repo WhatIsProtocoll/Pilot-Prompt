@@ -8,11 +8,11 @@ from shapely.geometry import Point
 from transformers import AutoFeatureExtractor, AutoTokenizer, WhisperProcessor, WhisperForConditionalGeneration, pipeline
 from pydub import AudioSegment
 import torchaudio.transforms as T
-from transcription_utils import generate_response, normalize_text_to_callsign, extract_context_from_transcript
+from transcription_utils import normalize_text_to_callsign, extract_context_from_transcript, get_icao_response, clean_transcript, strip_callsign_from_transcript, callsign_matches
 from icao_rules_en import ICAO_RULES_EN
 from icao_rules_de import ICAO_RULES_DE
 from flight_plan_utils import generate_checklist_from_form
-
+import re
 
 # Model setup
 MODEL_ID = "tclin/distil-large-v3.5-atcosim-finetune"
@@ -26,6 +26,8 @@ def load_audio(audio_path):
     return waveform, sr
 
 def process_input(audio, callsign, language):
+    response, intent = "", None
+
     if audio is None or callsign.strip() == "":
         return "No input received.", "", ""
 
@@ -42,21 +44,27 @@ def process_input(audio, callsign, language):
         predicted_ids = model.generate(inputs.input_features)  # No forced decoder IDs
 
     transcription = processor.batch_decode(predicted_ids, skip_special_tokens=True)[0]
+    print(f"Raw transcription: {transcription}")
 
-    rules = ICAO_RULES_DE if language == "de" else ICAO_RULES_EN
+    extracted_cs = normalize_text_to_callsign(transcription)
+    print(f"Normalized text: {extracted_cs}")
+    print(f"Input callsign: {callsign}")
+    
+    transcription = clean_transcript(transcription)
+    print(f"Transcription: {transcription}")
+
     context = extract_context_from_transcript(transcription, language)
-    response = generate_response(transcription, callsign, rules, context)
-    norm_text = normalize_text_to_callsign(transcription)
+    print(f"Extracted context: {context}")
 
-    if response is None:
-        response = ml_fallback_handler(transcription, callsign)
+    if callsign_matches(callsign, extracted_cs):
+        cleaned = strip_callsign_from_transcript(transcription, callsign, ICAO_RULES_EN if language == "en" else ICAO_RULES_DE)
+        response, intent = get_icao_response(cleaned, callsign, context, language)
+        print(f"Generated response: {response}")
+    
+    if not response:
+        response = "No relevant transmission detected for your callsign."
 
-    return transcription, norm_text, response
-
-# Fallback logic (e.g., GPT)
-def ml_fallback_handler(transcript, callsign):
-    return f"No ICAO phrase matched.\n\nSuggested interpretation: '{transcript}'"
-
+    return transcription, extracted_cs, response
 
 def checklist_markdown(checklist_dict):
     markdown = ""
@@ -79,7 +87,7 @@ with gr.Blocks() as demo:
             with gr.Column():
                 audio_input = gr.Audio(type="filepath", label="Speak your transmission")
                 callsign_input = gr.Textbox(label="Your callsign (e.g., D-EABC)")
-                language_input = gr.Radio(["de", "en"], label="Language", value="de")
+                language_input = gr.Radio(["en", "de"], label="Language", value="en")
             with gr.Column():
                 transcription_output = gr.Textbox(label="Transcription")
                 callsign_output = gr.Textbox(label="Extracted Callsign")
@@ -102,17 +110,6 @@ with gr.Blocks() as demo:
             dep = gr.Textbox(label="Departure ICAO", value="EDFE")
             arr = gr.Textbox(label="Arrival ICAO", value="EDFN")
             position = gr.Textbox(label="Start Position", value="Vorfeld A")
-
-        ''' Uncomment if you want to include runway, QNH, reporting point, squawk, and altitude
-        with gr.Row():
-            Piste = gr.Textbox(label="Runway", value="25L")
-            QNH = gr.Textbox(label="QNH", value="1013 hPa")
-            report = gr.Textbox(label="Reporting Point", value="Kilo")
-
-        with gr.Row():
-            squawk = gr.Textbox(label="Squawk", value="7000")
-            #fis = gr.Textbox(label="FIS Name", value="Langen Information")
-            alt = gr.Number(label="Altitude (ft)", value=3000)'''
 
         with gr.Tab("Checklist"):
             checklist_display = checklist_markdown({})

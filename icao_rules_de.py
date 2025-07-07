@@ -142,7 +142,7 @@ PHASE_ORDER = [
     "Arrival / Traffic Circuit"
 ]
 
-NUMBER_WORDS_DE = {
+WORD_TO_NUMBER_DE = {
     "null": "0",
     "eins": "1",
     "zwo": "2",  # Luftfahrt-Variante von zwei
@@ -160,4 +160,4 @@ NUMBER_WORDS_DE = {
 }
 
 def words_to_number_de(words):
-    return ''.join(NUMBER_WORDS_DE.get(w.lower(), w) for w in words)
+    return ''.join(WORD_TO_NUMBER_DE.get(w.lower(), w) for w in words)
