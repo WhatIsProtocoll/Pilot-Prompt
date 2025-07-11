@@ -14,17 +14,24 @@ from icao_rules_en import ICAO_RULES_EN
 from icao_rules_de import ICAO_RULES_DE
 from flight_plan_utils import generate_checklist_from_form
 from faster_whisper import WhisperModel
+from silero_vad import load_silero_vad, get_speech_timestamps
 
-""" 
+vad_model, utils = torch.hub.load(
+    repo_or_dir='snakers4/silero-vad',
+    model='silero_vad',
+    force_reload=False
+)
+(get_speech_timestamps, _, read_audio, _, _) = utils
+
 # Model setup
 MODEL_ID = "tclin/whisper-large-v3-turbo-atcosim-finetune"
 processor = WhisperProcessor.from_pretrained(MODEL_ID)
 model = WhisperForConditionalGeneration.from_pretrained(MODEL_ID)
 model.generation_config.forced_decoder_ids = None
 model.generation_config.pad_token_id = model.generation_config.eos_token_id
- """
+
 # Real-time setup
-model = WhisperModel(
+RTModel = WhisperModel(
     "jacktol/whisper-medium.en-fine-tuned-for-ATC-faster-whisper",
     device="cpu",
     compute_type="int8"
@@ -72,23 +79,33 @@ def live_stream(buffer_list, new_chunk):
     if audio.ndim > 1:
         audio = audio.mean(axis=1)
     audio = librosa.resample(audio.astype(np.float32), orig_sr=sr, target_sr=16000)
-
     buffer_list.append(audio)
     buffer = np.concatenate(buffer_list)
-    max_samps = 15 * 16000
-    if buffer.shape[0] > max_samps:
-        buffer = buffer[-max_samps:]
+    if buffer.shape[0] > 15 * 16000:
+        buffer = buffer[-15 * 16000:]
         buffer_list = [buffer]
 
-    # Rename returned generator
-    trans_segments, _ = model.transcribe(
-        buffer,
-        beam_size=5, vad_filter=True, language="en"
-    )
-    texts = [segment.text for segment in trans_segments]
-    text = " ".join(texts)
+    # Use Silero VAD to extract speech intervals
+    speech_ts = get_speech_timestamps(buffer, vad_model, sampling_rate=16000)
 
-    return buffer_list, text
+    full_text = ""
+    for seg in speech_ts:
+        start, end = seg['start'], seg['end']
+        chunk = buffer[start:end]
+
+        segments, _ = RTModel.transcribe(
+            chunk,
+            beam_size=1,
+            temperature=0,
+            no_speech_threshold=0.2,
+            condition_on_previous_text=False,
+            vad_filter=False,
+            language="en"
+        )
+        for s in segments:
+            full_text += s.text
+
+    return buffer_list, full_text
 
 
 # Fallback logic (e.g., GPT)
