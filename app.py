@@ -146,34 +146,34 @@ def checklist_markdown(checklist_dict):
 with gr.Blocks() as demo:
     gr.Markdown("## ATCopilot – Radio Communication Assistant")
 
-'''
-Obsolete perhaps
-    with gr.Tab("Live ATC Log"):
-        state = gr.State(value=[])
+    '''
+    Obsolete perhaps
+        with gr.Tab("Live ATC Log"):
+            state = gr.State(value=[])
 
-        with gr.Row():
-            with gr.Column():
-                live_audio = gr.Audio(
-                    sources=["microphone"],
-                    type="numpy",
-                    label="🎙️ Live ATC Input"
-                )
-            with gr.Column():
-                live_output = gr.Textbox(
-                    label="Live Transcript / Log",
-                    lines=10,
-                    interactive=False
-                )
+            with gr.Row():
+                with gr.Column():
+                    live_audio = gr.Audio(
+                        sources=["microphone"],
+                        type="numpy",
+                        label="🎙️ Live ATC Input"
+                    )
+                with gr.Column():
+                    live_output = gr.Textbox(
+                        label="Live Transcript / Log",
+                        lines=10,
+                        interactive=False
+                    )
 
-        # Setup streaming event
-        live_audio.stream(
-            fn=live_stream,      # not live_transcribe
-            inputs=[state, live_audio],
-            outputs=[state, live_output],
-            time_limit=600,
-            stream_every=1.0
-)
-'''
+            # Setup streaming event
+            live_audio.stream(
+                fn=live_stream,      # not live_transcribe
+                inputs=[state, live_audio],
+                outputs=[state, live_output],
+                time_limit=600,
+                stream_every=1.0
+    )
+    '''
 
     with gr.Tab("Live Transcription"):
         live_output = gr.Textbox(label="Live Transcription", lines=10)
