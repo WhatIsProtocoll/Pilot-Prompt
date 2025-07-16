@@ -13,6 +13,10 @@ from icao_rules_en import ICAO_RULES_EN
 from icao_rules_de import ICAO_RULES_DE
 from flight_plan_utils import generate_checklist_from_form
 import re
+from live_transcription import start_transcription, stop_audio_stream, send_audio_stream
+import sounddevice as sd
+
+sd.default.device = (1, None)  
 
 # Model setup
 MODEL_ID = "tclin/distil-large-v3.5-atcosim-finetune"
@@ -80,6 +84,25 @@ def checklist_markdown(checklist_dict):
 # First view: Your existing radio transcription assistant
 with gr.Blocks() as demo:
     gr.Markdown("## ATCopilot – Radio Communication Assistant")
+
+    with gr.Tab("Live Transcription"):
+        live_output = gr.Textbox(label="Live Transcription", lines=10)
+        start_button = gr.Button("Start Live Transcription")
+        stop_button = gr.Button("Stop")
+        status = gr.Textbox(label="Status")
+
+        def start():
+            start_transcription(live_output)
+            return gr.update(value="🔴 Listening..."), "🔴 Listening..."
+
+        def stop():
+            stop_audio_stream()
+            return gr.update(value="🔴 Stopped..."), "🔴 Stopped..."
+
+        status = gr.Textbox(label="Status")
+
+        start_button.click(fn=start, outputs=[live_output, status])
+        stop_button.click(fn=stop, outputs=[live_output, status])
 
     # First Tab: Transcription
     with gr.Tab("Transcription"):
