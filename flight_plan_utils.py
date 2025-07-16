@@ -6,6 +6,7 @@ from shapely.geometry import Point
 import geopandas as gpd
 import json
 from frequency_retrieval import (get_airport_by_icao, get_frequencies, get_lat_lon, generate_route_points,plot_route_over_fis, get_ordered_frequencies, create_nested_frequency_map, extract_frequency_roles)
+import api_frequencies
 
 # Load geojson for airport and airspace data
 with open("openaip_data/de_apt.geojson", "r") as file:
@@ -56,23 +57,29 @@ def inject_frequency_transitions(checklist, nested_freqs):
 
 def generate_checklist_from_form(cs, airplane_type, num_pax, dep_icao, arr_icao, position):
     # Get airport features
-    dep_airport = get_airport_by_icao(dep_icao, airport_data)
-    arr_airport = get_airport_by_icao(arr_icao, airport_data)
+    dep_airport = api_frequencies.get_airport_info(dep_icao)
+    arr_airport = api_frequencies.get_airport_info(arr_icao)
 
     if not dep_airport or not arr_airport:
         return "Error: Could not retrieve one or both airport features."
 
+    dep_coords = dep_airport["geometry"]["coordinates"]
+    arr_coords = arr_airport["geometry"]["coordinates"]
+
     # Extract frequencies
-    dep_freqs = get_frequencies(dep_airport)
-    arr_freqs = get_frequencies(arr_airport)
+    dep_freqs = api_frequencies.get_freqs_from_api(dep_icao)
+    arr_freqs = api_frequencies.get_freqs_from_api(arr_icao)
 
     # Generate route and enroute frequencies
-    start = Point(*get_lat_lon(dep_airport))
+    start = Point(dep_coords[0], dep_coords[1])
     print(f"Departure Frequencies: {dep_freqs}")
-    end = Point(*get_lat_lon(arr_airport))
+
+    end = Point(arr_coords[0], arr_coords[1])
     print(f"Arrival Frequencies: {arr_freqs}")
+    
     route_points = generate_route_points(start, end)
     enroute_freqs = get_ordered_frequencies(route_points, airspaces)
+    
     print("Nested Frequency List:")
     for (name, value), info in enroute_freqs.items():
         print(f"{name} ({value} MHz): used during {info['phase']}")
@@ -96,11 +103,10 @@ def generate_checklist_from_form(cs, airplane_type, num_pax, dep_icao, arr_icao,
         "dep": dep_icao,
         "arr": arr_icao,
         "position": position,
-        "vorfeld": roles.get("vorfeld", ""),
-        "info": roles.get("info", ""),
-        "fis": roles.get("fis", ""),
-        "fis2": roles.get("fis2", ""),  # optional fallback for enroute switch
-        "arr_info": roles.get("arr_info", "")
+        "vorfeld": roles.get("vorfeld", ("", "")),
+        "info": roles.get("info", ("", "")),
+        "fis": roles.get("fis", []),          # list of (name, freq)
+        "arr_info": roles.get("arr_info", ("", "")),
     }
 
     # Build and enhance checklist
