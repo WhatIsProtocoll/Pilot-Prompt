@@ -16,8 +16,13 @@ from flight_plan_utils import generate_checklist_from_form
 from faster_whisper import WhisperModel
 from silero_vad import load_silero_vad, get_speech_timestamps
 import re
-from live_transcription import start_transcription, stop_audio_stream, send_audio_stream
+from live_transcription import start_transcription, stop_audio_stream, send_audio_stream, poll_transcript
+from shared import shared_transcript, shared_lock
 import sounddevice as sd
+
+""" 
+shared_transcript = {"text": ""}
+shared_lock = Lock()
 
 vad_model, utils = torch.hub.load(
     repo_or_dir='snakers4/silero-vad',
@@ -26,6 +31,7 @@ vad_model, utils = torch.hub.load(
 )
 (get_speech_timestamps, _, read_audio, _, _) = utils
 
+ """
 sd.default.device = (1, None)  
 
 # Model setup
@@ -89,6 +95,7 @@ def process_input(audio, callsign, language):
 
     return transcription, extracted_cs, response
 
+""" 
 def live_stream(buffer_list, new_chunk):
     if new_chunk is None:
         return buffer_list, ""
@@ -125,6 +132,7 @@ def live_stream(buffer_list, new_chunk):
 
     return buffer_list, full_text
 
+"""
 
 # Fallback logic (e.g., GPT)
 def ml_fallback_handler(transcript, callsign):
@@ -176,6 +184,7 @@ with gr.Blocks() as demo:
     '''
 
     with gr.Tab("Live Transcription"):
+        """
         live_output = gr.Textbox(label="Live Transcription", lines=10)
         start_button = gr.Button("Start Live Transcription")
         stop_button = gr.Button("Stop")
@@ -193,6 +202,30 @@ with gr.Blocks() as demo:
 
         start_button.click(fn=start, outputs=[live_output, status])
         stop_button.click(fn=stop, outputs=[live_output, status])
+        """
+        live_output = gr.Textbox(
+            label="Live Transcription",
+            lines=10,
+            interactive=False,
+            value=poll_transcript,   # periodically call this function
+            every=1                  # every 1 second
+        )
+        status = gr.Textbox(label="Status", interactive=False)
+        start_button = gr.Button("Start Live Transcription")
+        stop_button = gr.Button("Stop")
+
+        def start():
+            with shared_lock:
+                shared_transcript["text"] = ""
+            start_transcription()
+            return "🔴 Listening..."
+
+        def stop():
+            stop_audio_stream()
+            return "🛑 Stopped."
+
+        start_button.click(fn=start, outputs=[status])
+        stop_button.click(fn=stop, outputs=[status])
 
     # First Tab: Transcription
     with gr.Tab("Transcription"):

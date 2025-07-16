@@ -1,11 +1,15 @@
 import os
+from dotenv import load_dotenv
 import json
 import base64
 import threading
 import sounddevice as sd
 import websocket
 import time
+from shared import shared_transcript, shared_lock
 
+
+load_dotenv()
 
 audio_thread = None
 ws_app = None
@@ -36,6 +40,7 @@ def send_audio_stream(ws, stop_event, session_holder, session_ready):
         return
 
     def callback(indata, frames, time_info, status):
+        print(f"🔊 Captured {len(indata)} bytes of audio")
         if status:
             print("Audio error:", status)
 
@@ -60,6 +65,10 @@ def send_audio_stream(ws, stop_event, session_holder, session_ready):
 
     with sd.RawInputStream(samplerate=SAMPLE_RATE, channels=CHANNELS, dtype='int16', callback=callback):
         stop_event.wait()
+
+def poll_transcript():
+    with shared_lock:
+        return shared_transcript["text"]
 
 def on_close(ws, close_status_code, close_msg):
     print(f"🔴 Connection closed: {close_status_code} - {close_msg}")
@@ -86,6 +95,8 @@ def start_transcription(output_box=None):
     global ws_app, audio_thread
 
     def on_message_custom(ws, message):
+
+        """
         data = json.loads(message)
         msg_type = data.get("type", "")
 
@@ -119,30 +130,62 @@ def start_transcription(output_box=None):
             # Optionally print other messages for debugging
             print("📩 Received:", data)
 
+            """
+        data = json.loads(message)
+        msg_type = data.get("type", "")
+
+        if msg_type == "transcription_session.created":
+            session_holder["id"] = data["session"]["id"]
+            print(f"🎙️ Session created: {session_holder['id']}")
+
+            session_ready.set()
+            stop_event.clear()
+
+            global audio_thread
+            audio_thread = threading.Thread(
+                target=send_audio_stream,
+                args=(ws, stop_event, session_holder, session_ready),
+                daemon=True
+            )
+            audio_thread.start()
+
+        elif msg_type == "input_audio_transcription":
+            text = data["input_audio_transcription"]["text"]
+            with shared_lock:
+                shared_transcript["text"] += " " + text.strip()
+            print(f"📝 {text}")
+
+        elif msg_type == "turn_start":
+            print("🔊 Turn started.")
+        elif msg_type == "turn_end":
+            print("🔇 Turn ended.")
+    
     def on_open(ws):
         print("✅ Connected to OpenAI Realtime API")
 
         # Initial session creation with configuration (no need for second update)
         setup = {
             "type": "transcription_session.update",
-            "input_audio": {"format": "pcm16"},
-            "input_audio_transcription": {
-                "model": "gpt-4o-mini-transcribe",
-                "prompt": "",
-                "language": "en"   # Explicit language
-            },
-            "turn_detection": {
-                "type": "server_vad",
-                "threshold": 0.5,
-                "prefix_padding_ms": 300,
-                "silence_duration_ms": 500
-            },
-            "input_audio_noise_reduction": {
-                "type": "near_field"
-            },
-            "include": [
-                "item.input_audio_transcription.logprobs"
-            ]
+            "session" : {
+                "input_audio_format": "pcm16",
+                "input_audio_transcription": {
+                    "model": "gpt-4o-mini-transcribe",
+                    "prompt": "",
+                    "language": "en"   # Explicit language
+                },
+                "turn_detection": {
+                    "type": "server_vad",
+                    "threshold": 0.5,
+                    "prefix_padding_ms": 300,
+                    "silence_duration_ms": 500
+                },
+                "input_audio_noise_reduction": {
+                    "type": "near_field"
+                },
+                "include": [
+                    "item.input_audio_transcription.logprobs"
+                ]
+            }
         }
 
         ws.send(json.dumps(setup))
