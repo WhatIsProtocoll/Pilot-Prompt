@@ -1,4 +1,5 @@
 import gradio as gr
+import numpy as np
 import torch
 import librosa
 import geopandas as gpd
@@ -12,17 +13,35 @@ from transcription_utils import normalize_text_to_callsign, extract_context_from
 from icao_rules_en import ICAO_RULES_EN
 from icao_rules_de import ICAO_RULES_DE
 from flight_plan_utils import generate_checklist_from_form
+from faster_whisper import WhisperModel
+from silero_vad import load_silero_vad, get_speech_timestamps
 import re
 from live_transcription import start_transcription, stop_audio_stream, send_audio_stream
 import sounddevice as sd
 
+vad_model, utils = torch.hub.load(
+    repo_or_dir='snakers4/silero-vad',
+    model='silero_vad',
+    force_reload=False
+)
+(get_speech_timestamps, _, read_audio, _, _) = utils
+
 sd.default.device = (1, None)  
 
 # Model setup
-MODEL_ID = "tclin/distil-large-v3.5-atcosim-finetune"
+MODEL_ID = "tclin/whisper-large-v3-turbo-atcosim-finetune"
 processor = WhisperProcessor.from_pretrained(MODEL_ID)
 model = WhisperForConditionalGeneration.from_pretrained(MODEL_ID)
 model.generation_config.forced_decoder_ids = None
+model.generation_config.pad_token_id = model.generation_config.eos_token_id
+
+# Real-time setup
+RTModel = WhisperModel(
+    "jacktol/whisper-medium.en-fine-tuned-for-ATC-faster-whisper",
+    device="cpu",
+    compute_type="int8"
+)
+
 
 def load_audio(audio_path):
     # Load and resample to 16000 Hz (Whisper expects 16kHz)
@@ -59,7 +78,7 @@ def process_input(audio, callsign, language):
 
     context = extract_context_from_transcript(transcription, language)
     print(f"Extracted context: {context}")
-
+    
     if callsign_matches(callsign, extracted_cs):
         cleaned = strip_callsign_from_transcript(transcription, callsign, ICAO_RULES_EN if language == "en" else ICAO_RULES_DE)
         response, intent = get_icao_response(cleaned, callsign, context, language)
@@ -69,6 +88,48 @@ def process_input(audio, callsign, language):
         response = "No relevant transmission detected for your callsign."
 
     return transcription, extracted_cs, response
+
+def live_stream(buffer_list, new_chunk):
+    if new_chunk is None:
+        return buffer_list, ""
+    sr, audio = new_chunk
+
+    if audio.ndim > 1:
+        audio = audio.mean(axis=1)
+    audio = librosa.resample(audio.astype(np.float32), orig_sr=sr, target_sr=16000)
+    buffer_list.append(audio)
+    buffer = np.concatenate(buffer_list)
+    if buffer.shape[0] > 15 * 16000:
+        buffer = buffer[-15 * 16000:]
+        buffer_list = [buffer]
+
+    # Use Silero VAD to extract speech intervals
+    speech_ts = get_speech_timestamps(buffer, vad_model, sampling_rate=16000)
+
+    full_text = ""
+    for seg in speech_ts:
+        start, end = seg['start'], seg['end']
+        chunk = buffer[start:end]
+
+        segments, _ = RTModel.transcribe(
+            chunk,
+            beam_size=1,
+            temperature=0,
+            no_speech_threshold=0.2,
+            condition_on_previous_text=False,
+            vad_filter=False,
+            language="en"
+        )
+        for s in segments:
+            full_text += s.text
+
+    return buffer_list, full_text
+
+
+# Fallback logic (e.g., GPT)
+def ml_fallback_handler(transcript, callsign):
+    return f"No ICAO phrase matched.\n\nSuggested interpretation: '{transcript}'"
+
 
 def checklist_markdown(checklist_dict):
     markdown = ""
@@ -84,6 +145,35 @@ def checklist_markdown(checklist_dict):
 # First view: Your existing radio transcription assistant
 with gr.Blocks() as demo:
     gr.Markdown("## ATCopilot – Radio Communication Assistant")
+
+'''
+Obsolete perhaps
+    with gr.Tab("Live ATC Log"):
+        state = gr.State(value=[])
+
+        with gr.Row():
+            with gr.Column():
+                live_audio = gr.Audio(
+                    sources=["microphone"],
+                    type="numpy",
+                    label="🎙️ Live ATC Input"
+                )
+            with gr.Column():
+                live_output = gr.Textbox(
+                    label="Live Transcript / Log",
+                    lines=10,
+                    interactive=False
+                )
+
+        # Setup streaming event
+        live_audio.stream(
+            fn=live_stream,      # not live_transcribe
+            inputs=[state, live_audio],
+            outputs=[state, live_output],
+            time_limit=600,
+            stream_every=1.0
+)
+'''
 
     with gr.Tab("Live Transcription"):
         live_output = gr.Textbox(label="Live Transcription", lines=10)
