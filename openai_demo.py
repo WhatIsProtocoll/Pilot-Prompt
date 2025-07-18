@@ -4,12 +4,10 @@ import base64
 import threading
 import sounddevice as sd
 import websocket
-import queue
 
 audio_thread = None
 ws_app = None
 stop_event = threading.Event()
-transcription_queue = queue.Queue()
 
 API_KEY = os.getenv("OPENAI_API_KEY")
 if API_KEY is None:
@@ -24,17 +22,19 @@ HEADERS = [
 SAMPLE_RATE = 16000
 CHANNELS = 1
 
+# Shared session holder
 session_holder = {"id": None}
 session_ready = threading.Event()
 
 def send_audio_stream(ws, stop_event, session_holder, session_ready):
     session_ready.wait()
+
     if stop_event.is_set():
         return
 
     def callback(indata, frames, time_info, status):
         if status:
-            print("🎧 Audio status:", status)
+            print("Audio error:", status)
 
         if stop_event.is_set() or not ws.sock or not ws.sock.connected:
             raise sd.CallbackStop()
@@ -66,6 +66,7 @@ def on_error(ws, error):
 
 def stop_audio_stream():
     global audio_thread, ws_app
+
     stop_event.set()
 
     if audio_thread and audio_thread.is_alive():
@@ -86,6 +87,8 @@ def start_transcription():
         if msg_type == "transcription_session.created":
             session_holder["id"] = data["session"]["id"]
             print(f"🎙️ Session created: {session_holder['id']}")
+
+            # Start audio stream
             session_ready.set()
 
             stop_event.clear()
@@ -96,29 +99,24 @@ def start_transcription():
             )
             audio_thread.start()
 
-        elif msg_type == "conversation.item.input_audio_transcription.delta":
-            text = data.get("delta", "")
-            transcription_queue.put(("partial", text))
-            print(f"📝 Partial transcription: {text}")
+        elif msg_type == "conversation.item.created":
+            item = data.get("item", {})
+            content = item.get("content", [])
+            for part in content:
+                if part.get("type") == "input_audio":
+                    transcript = part.get("transcript")
+                    if transcript:
+                        print(f"📝 Transcribed: {transcript}")
+                    else:
+                        print("⚠️ No transcription (silence or low confidence).")
 
-        elif msg_type == "conversation.item.input_audio_transcription.completed":
-            text = data.get("transcript", "")
-            transcription_queue.put(("final", text))
-            print(f"✅ Final transcription: {text}")
-
-        elif msg_type == "input_audio_buffer.speech_started":
-            print("🔊 Speech detected.")
-
-        elif msg_type == "input_audio_buffer.speech_stopped":
-            print("🔇 Speech stopped. Committing audio buffer...")
-
-        elif msg_type == "input_audio_buffer.committed":
-            print("✅ Audio buffer committed.")
-
+        elif msg_type == "turn_start":
+            print("🔊 Turn started.")
+        elif msg_type == "turn_end":
+            print("🔇 Turn ended.")
         elif msg_type == "error":
             error = data.get("error", {})
             print(f"❗ API Error: {error.get('message')}")
-
         else:
             print("📩 Received:", json.dumps(data, indent=2))
 
@@ -160,19 +158,8 @@ def start_transcription():
         on_error=on_error
     )
 
-    threading.Thread(target=ws_app.run_forever, daemon=True).start()
+    ws_app.run_forever()
 
-def transcribe_stream():
-    """Generator for Gradio to stream transcription results."""
-    buffer = ""
-    while True:
-        try:
-            msg_type, text = transcription_queue.get(timeout=1)
-            if msg_type == "partial":
-                # Yield partial text, do not clear buffer
-                yield buffer + text
-            elif msg_type == "final":
-                buffer += text + "\n"
-                yield buffer
-        except queue.Empty:
-            break
+if __name__ == "__main__":
+    print("🎤 Starting live transcription... Press Ctrl+C to stop.")
+    start_transcription()

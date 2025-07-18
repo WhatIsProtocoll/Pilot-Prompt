@@ -4,6 +4,9 @@ from shapely.geometry import Point as ShapelyPoint
 import geopandas as gpd
 from collections import OrderedDict, defaultdict
 import matplotlib.pyplot as plt
+import os
+import io
+from PIL import Image
 
 
 with open("openaip_data/de_apt.geojson", "r") as file:
@@ -49,10 +52,7 @@ def generate_route_points(start, end, num_points: int = 20):
     
     return route_points
 
-def plot_route_over_fis(route_points, fis_airspaces, dep_icao="DEP", arr_icao="ARR"):
-    import matplotlib.pyplot as plt
-    import geopandas as gpd
-
+def plot_route_over_fis(route_points, fis_airspaces, dep_icao="DEP", arr_icao="ARR", save_to_file=True):
     # Create a GeoDataFrame from route points
     route_gdf = gpd.GeoDataFrame(geometry=route_points, crs="EPSG:4326")
 
@@ -68,10 +68,26 @@ def plot_route_over_fis(route_points, fis_airspaces, dep_icao="DEP", arr_icao="A
     plt.legend()
     plt.grid(True)
 
-    # Generate dynamic filename
-    filename = f"route_{dep_icao.upper()}_{arr_icao.upper()}.png"
-    plt.savefig(filename, dpi=300)
-    print(f"Plot saved as {filename}")
+    if save_to_file:
+        # Save to /routes/ folder
+        output_dir = "routes"
+        os.makedirs(output_dir, exist_ok=True)
+
+        filename = f"route_{dep_icao.upper()}_{arr_icao.upper()}.png"
+        filepath = os.path.join(output_dir, filename)
+
+        plt.savefig(filepath, bbox_inches="tight")
+        plt.close()
+        return filepath  # For gr.Image(type="filepath")
+
+    else:
+        # Return as in-memory image
+        buf = io.BytesIO()
+        plt.savefig(buf, format="png", bbox_inches="tight")
+        plt.close()
+        buf.seek(0)
+
+        return Image.open(buf)  # For gr.Image(type="pil")
 
 # Ensure enroute frequencies are ordered and unique
 def get_ordered_frequencies(route_points, fis_airspaces):
@@ -145,7 +161,8 @@ def extract_frequency_roles(dep_freqs, arr_freqs, enroute_freqs):
     "info": "",
     "fis": "",
     "fis2": "",
-    "arr_info": ""
+    "arr_info": "",
+    "arr_apron": ""
     }
     vorfeld_fallback = None
 
@@ -190,7 +207,9 @@ def extract_frequency_roles(dep_freqs, arr_freqs, enroute_freqs):
     # Arrival: look for radio/info from arrival field
     for name in arr_freqs:
         upper = name.upper()
-        if "RADIO" in upper or "INFO" in upper:
+        if "VORFELD" in upper or "GROUND" in upper:
+            roles["arr_apron"] = name
+        elif "RADIO" in upper or "INFO" in upper:
             roles["arr_info"] = name
             break
 
@@ -235,11 +254,12 @@ def classify_frequency_by_context(name, context):
     name = name.upper()
 
     if "VORFELD" in name or "GROUND" in name:
-        return "Pre-Start / Taxi" if context == "departure" else "Arrival / Traffic Circuit"
-    elif "INFORMATION" in name and "LANGEN" not in name:
-        return "Departure / Takeoff" if context == "departure" else "Arrival / Traffic Circuit"
-    elif "FIS" in name or "LANGEN INFORMATION" in name:
+        return "Pre-Start / Taxi" if context == "departure" else "After Landing / Apron"
+    elif "LANGEN INFORMATION" in name or "FIS" in name:
         return "Enroute / Cruise"
+    elif "INFORMATION" in name:
+        # Only non-Langen Information gets mapped contextually
+        return "Departure / Takeoff" if context == "departure" else "Arrival / Traffic Circuit"
     elif "RADIO" in name or "INFO" in name:
         return "Departure / Takeoff" if context == "departure" else "Arrival / Traffic Circuit"
     else:

@@ -2,7 +2,10 @@ import gradio as gr
 import torch
 import librosa
 import geopandas as gpd
-import json
+import time
+import socket
+import subprocess
+import os
 from collections import OrderedDict
 from shapely.geometry import Point
 from transformers import AutoFeatureExtractor, AutoTokenizer, WhisperProcessor, WhisperForConditionalGeneration, pipeline
@@ -12,11 +15,17 @@ from transcription_utils import normalize_text_to_callsign, extract_context_from
 from icao_rules_en import ICAO_RULES_EN
 from icao_rules_de import ICAO_RULES_DE
 from flight_plan_utils import generate_checklist_from_form
-import re
-from live_transcription import start_transcription, stop_audio_stream, send_audio_stream
+from whisper_streaming.whisper_mic_client import run_mic_client, stop_mic_client, transcription_queue
+from whisper_streaming.whisper_server_launcher import launch_whisper_server
 import sounddevice as sd
+import threading
+from queue import Empty
+from threading import Event
+import signal
 
-sd.default.device = (1, None)  
+stop_event = Event()
+sd.default.device = (1, None)
+whisper_proc = None   
 
 # Model setup
 MODEL_ID = "tclin/distil-large-v3.5-atcosim-finetune"
@@ -24,6 +33,7 @@ processor = WhisperProcessor.from_pretrained(MODEL_ID)
 model = WhisperForConditionalGeneration.from_pretrained(MODEL_ID)
 model.generation_config.forced_decoder_ids = None
 
+######################### Audio Processing ######################### 
 def load_audio(audio_path):
     # Load and resample to 16000 Hz (Whisper expects 16kHz)
     waveform, sr = librosa.load(audio_path, sr=16000)
@@ -79,32 +89,105 @@ def checklist_markdown(checklist_dict):
         markdown += "\n"
     return markdown
 
+def start_whisper_server():
+    cmd = [
+        "python", "whisper_streaming/whisper_online_server.py",
+        "--model_dir", "whisper-tiny-mlx",
+        "--backend", "mlx-whisper",
+        "--lan", "en",
+        "--task", "transcribe",
+        "--port", "43007",
+        "--buffer_trimming", "sentence",
+        "--buffer_trimming_sec", "5"
+    ]
+
+    # Start as a background process
+    return subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        preexec_fn=os.setsid  # Optional: makes it a separate process group (for easier management)
+    )
+
+def wait_for_server(host, port, timeout=10):
+    """Wait for a TCP server to be ready."""
+    start_time = time.time()
+    while time.time() - start_time < timeout:
+        try:
+            with socket.create_connection((host, port), timeout=1):
+                print("✅ Whisper server is ready.")
+                return True
+        except OSError:
+            time.sleep(0.5)
+    raise RuntimeError("❗ Whisper server did not become ready in time.")
+
+def transcribe_stream():
+    while True:
+        text = transcription_queue.get()
+        yield text
+
+def stop_transcription():
+    stop_mic_client()
+
+    global whisper_proc
+    if whisper_proc:
+        try:
+            whisper_proc.terminate()
+            whisper_proc.wait(timeout=5)
+            whisper_proc = None
+            return "🛑 Whisper server and mic client stopped."
+        except Exception as e:
+            return f"Error stopping Whisper server: {e}"
+    else:
+        return "Mic client stopped. No Whisper server running."
+
+######################### Gradio UI Setup #########################
 
 # UI
-# First view: Your existing radio transcription assistant
 with gr.Blocks() as demo:
     gr.Markdown("## ATCopilot – Radio Communication Assistant")
 
+    # First View: Live Transcription
     with gr.Tab("Live Transcription"):
-        live_output = gr.Textbox(label="Live Transcription", lines=10)
-        start_button = gr.Button("Start Live Transcription")
-        stop_button = gr.Button("Stop")
-        status = gr.Textbox(label="Status")
+        live_output_stream = gr.Textbox(label="Live Transcription", lines=10, interactive=False)
+
+        start_btn = gr.Button("Start Transcription")
+        stop_btn = gr.Button("Stop Transcription")
+        stop_btn.click(fn=stop_transcription, outputs=[])
 
         def start():
-            start_transcription(live_output)
-            return gr.update(value="🔴 Listening..."), "🔴 Listening..."
+            threading.Thread(target=run_mic_client, daemon=True).start()
 
-        def stop():
-            stop_audio_stream()
-            return gr.update(value="🔴 Stopped..."), "🔴 Stopped..."
+        start_btn.click(fn=start, outputs=[])
 
-        status = gr.Textbox(label="Status")
+        def is_phrasing_point(text):
+            return text.strip().endswith((".", "!", "?", "over", "out", "roger", "cleared", "ready"))
 
-        start_button.click(fn=start, outputs=[live_output, status])
-        stop_button.click(fn=stop, outputs=[live_output, status])
+        def generator():
+            buffer = ""
+            full_transcript = ""
+            last_time = time.time()
 
-    # First Tab: Transcription
+            while True:
+                new_text = transcription_queue.get()
+                current_time = time.time()
+
+                # If there's a gap >1.5 seconds between chunks, assume pause
+                if current_time - last_time > 1.5:
+                    # Treat buffer as completed "sentence" on pause
+                    if buffer.strip():
+                        full_transcript += buffer.strip() + "\n\n"
+                        buffer = ""
+
+                buffer += new_text + " "
+                last_time = current_time
+
+                yield full_transcript + buffer.strip()
+
+        demo.load(generator, outputs=[live_output_stream])
+
+
+    # Second Tab: Transcription
     with gr.Tab("Transcription"):
         with gr.Row():
             with gr.Column():
@@ -122,7 +205,7 @@ with gr.Blocks() as demo:
             outputs=[transcription_output, callsign_output, response_output]
         )
 
-    # ✅ Second Tab: Checklist Generator
+    # Third Tab: Checklist Generator
     with gr.Tab("Checklist Generator"):
         with gr.Row():
             cs = gr.Textbox(label="Callsign", value="D-ABCD")
@@ -138,17 +221,26 @@ with gr.Blocks() as demo:
             checklist_display = checklist_markdown({})
 
             def wrapper_generate_and_render(*inputs):
-                checklist_dict = generate_checklist_from_form(*inputs)
-                return checklist_markdown(checklist_dict)
+                image_path, checklist_dict = generate_checklist_from_form(*inputs)
+                return image_path, checklist_markdown(checklist_dict)
 
             submit = gr.Button("Generate Checklist")
 
+            route_image = gr.Image(label="Route over FIS Airspaces", type="filepath")
             checklist_display = gr.Markdown()
+
             submit.click(
                 fn=wrapper_generate_and_render,
                 inputs=[cs, airplane_type, num_pax, dep, arr, position],
-                outputs=[checklist_display]
+                outputs=[route_image, checklist_display]
             )
 
 if __name__ == "__main__":
+    print("🚀 Starting Whisper Server...")
+    whisper_proc = launch_whisper_server()
+
+    print("⏳ Waiting for Whisper server to become ready...")
+    wait_for_server("localhost", 43007)
+
+    print("🖥️ Launching Webapp...")
     demo.launch()

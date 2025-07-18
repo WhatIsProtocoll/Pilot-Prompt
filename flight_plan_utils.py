@@ -35,22 +35,71 @@ def build_checklist_from_rules(user_data):
 def inject_frequency_transitions(checklist, nested_freqs):
     enhanced = {}
     last_freq_name = None
-    phase_sequence = ["Pre-Start / Taxi", "Departure / Takeoff", "Enroute / Cruise", "Arrival / Traffic Circuit"]
 
-    for phase in phase_sequence:
-        items = checklist.get(phase, []).copy()
+    dep_freqs = []
+    enroute_freqs = []
+    arr_freqs = []
+    after_landing_freqs = []
 
-        # Find matching frequency for this phase
-        for freq_key, info in nested_freqs.items():
-            if info["phase"] == phase:
-                if freq_key != last_freq_name:
-                    name, value = freq_key  # unpack the tuple
-                    transition_text = f"👉 Change to {name}: {value}"
-                    items.insert(0, transition_text)
-                    last_freq_name = freq_key
-                break
+    # Sort frequencies into phases
+    for freq_key, info in nested_freqs.items():
+        phase = info["phase"]
+        if phase in ["Pre-Start / Taxi", "Departure / Takeoff"]:
+            dep_freqs.append((freq_key, info))
+        elif phase == "Enroute / Cruise":
+            enroute_freqs.append((freq_key, info))
+        elif phase == "Arrival / Traffic Circuit":
+            arr_freqs.append((freq_key, info))
+        elif phase == "After Landing / Apron":
+            after_landing_freqs.append((freq_key, info))
 
-        enhanced[phase] = items
+    # Pre-Start / Taxi
+    taxi_items = checklist.get("Pre-Start / Taxi", []).copy()
+    if dep_freqs:
+        first_freq = dep_freqs[0][0]
+        name, value = first_freq
+        taxi_items.insert(0, f"🛩️ Contact {name}: {value} ")
+        last_freq_name = first_freq
+    enhanced["Pre-Start / Taxi"] = taxi_items
+
+    # Departure / Takeoff
+    dep_items = checklist.get("Departure / Takeoff", []).copy()
+    if len(dep_freqs) > 1:
+        for freq_key, info in dep_freqs[1:]:
+            name, value = freq_key
+            if freq_key != last_freq_name:
+                dep_items.insert(0, f"🛩️ Contact {name}: {value} ")
+                last_freq_name = freq_key
+    enhanced["Departure / Takeoff"] = dep_items
+
+    # Enroute / Cruise
+    enroute_items = checklist.get("Enroute / Cruise", []).copy()
+    enroute_contact_lines = []
+    for freq_key, info in enroute_freqs:
+        name, value = freq_key
+        if freq_key != last_freq_name:
+            enroute_contact_lines.append(f" 🛩️ {name}: {value} ")
+            last_freq_name = freq_key
+    # Add all enroute frequency changes at the top of the enroute block
+    enhanced["Enroute / Cruise"] = enroute_contact_lines + enroute_items
+
+    # Arrival / Traffic Circuit
+    arr_items = checklist.get("Arrival / Traffic Circuit", []).copy()
+    for freq_key, info in arr_freqs:
+        name, value = freq_key
+        if freq_key != last_freq_name:
+            arr_items.insert(0, f"🛩️ Contact {name}: {value} ")
+            last_freq_name = freq_key
+    enhanced["Arrival / Traffic Circuit"] = arr_items
+
+    # After Landing / Apron
+    after_landing_items = checklist.get("After Landing / Apron", []).copy()
+    for freq_key, info in after_landing_freqs:
+        name, value = freq_key
+        if freq_key != last_freq_name:
+            after_landing_items.insert(0, f"🛩️ Contact {name}: {value} ")
+            last_freq_name = freq_key
+    enhanced["After Landing / Apron"] = after_landing_items
 
     return enhanced
 
@@ -78,7 +127,7 @@ def generate_checklist_from_form(cs, airplane_type, num_pax, dep_icao, arr_icao,
         print(f"{name} ({value} MHz): used during {info['phase']}")
 
     route_points = generate_route_points(start, end)
-    plot_route_over_fis(route_points, airspaces, dep_icao, arr_icao)
+    image_path = plot_route_over_fis(route_points, airspaces, dep_icao, arr_icao)
 
     # Use new nested structure
     nested_freqs = create_nested_frequency_map(dep_freqs, arr_freqs, enroute_freqs)
@@ -100,7 +149,8 @@ def generate_checklist_from_form(cs, airplane_type, num_pax, dep_icao, arr_icao,
         "info": roles.get("info", ""),
         "fis": roles.get("fis", ""),
         "fis2": roles.get("fis2", ""),  # optional fallback for enroute switch
-        "arr_info": roles.get("arr_info", "")
+        "arr_info": roles.get("arr_info", ""),
+        "arr_apron": roles.get("arr_apron", "")
     }
 
     # Build and enhance checklist
@@ -113,7 +163,7 @@ def generate_checklist_from_form(cs, airplane_type, num_pax, dep_icao, arr_icao,
         output += f"### {phase}\n"
         output += "\n".join(f"- {call}" for call in calls) + "\n\n"
 
-    return with_transitions
+    return image_path, with_transitions
 
 
 '''

@@ -131,6 +131,20 @@ ICAO_RULES_EN = {
             "go around", "going around", "abort landing"
         ],
         "response": lambda cs, ctx={}: f"{cs} — going around"
+    },
+
+    "arrival_apron_checkin": {
+        "patterns": [
+            "vacated runway", "clear of runway", "on apron"
+        ],
+        "response": lambda cs, arr_apron, ctx={}: f"{arr_apron} – {cs}"
+    },
+    
+    "taxi_to_parking": {
+    "patterns": [
+        "taxi to general aviation", "taxi to parking", "taxi to stand"
+    ],
+    "response": lambda cs, ctx={}: f"Taxiing to general aviation parking, {cs}"
     }
 }
 
@@ -155,14 +169,19 @@ PHASE_MAPPING = {
     "arrival_report": "Arrival / Traffic Circuit",
     "approach_clearance": "Arrival / Traffic Circuit",
     "report_point": "Arrival / Traffic Circuit",
-    "go_around": "Arrival / Traffic Circuit"
+    "go_around": "Arrival / Traffic Circuit",
+
+    "arrival_apron_checkin": "After Landing / Apron",
+    "taxi_to_parking": "After Landing / Apron"
+
 }
 
 PHASE_ORDER = [
     "Pre-Start / Taxi",
     "Departure / Takeoff",
     "Enroute / Cruise",
-    "Arrival / Traffic Circuit"
+    "Arrival / Traffic Circuit",
+    "After Landing / Apron"
 ]
 
 def words_to_number_en(words):

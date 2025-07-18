@@ -107,6 +107,20 @@ ICAO_RULES_DE = {
         "patterns": [
             "durchstarten", "go around", "abbrechen landung"],
         "response": lambda cs, ctx={}: f" {cs} – startet durch."
+    },
+
+    "arrival_apron_checkin": {
+    "patterns": [
+        "rollhalt passiert", "runway vacated", "bin auf dem vorfeld"
+    ],
+    "response": lambda cs, arr_apron, ctx={}: f"{arr_apron} – {cs}"
+    },
+
+    "taxi_to_parking": {
+    "patterns": [
+        "rollen zur allgemeinen luftfahrt", "rollen zum parkplatz", "rollen zur position"
+    ],
+    "response": lambda cs, ctx={}: f"{cs}, rolle zur allgemeinen Luftfahrt Abstellposition"
     }
 }
 
@@ -126,20 +140,23 @@ PHASE_MAPPING = {
     "verkehrsinformationen": "Enroute / Cruise",
     "abmeldung_fis": "Enroute / Cruise",
     #"frequency_change": "Enroute / Cruise",
-    "squawk_info": "Enroute / Cruise",
 
     "einladung_arr": "Arrival / Traffic Circuit",
     "anmeldung_arr_info": "Arrival / Traffic Circuit",
     "anflug_frei": "Arrival / Traffic Circuit",
     "report_point": "Arrival / Traffic Circuit",
-    "durchstarten": "Arrival / Traffic Circuit"
+    "durchstarten": "Arrival / Traffic Circuit",
+
+    "arrival_apron_checkin": "After Landing / Apron",
+    "taxi_to_parking": "After Landing / Apron"
 }
 
 PHASE_ORDER = [
     "Pre-Start / Taxi",
     "Departure / Takeoff",
     "Enroute / Cruise",
-    "Arrival / Traffic Circuit"
+    "Arrival / Traffic Circuit",
+    "After Landing / Apron"
 ]
 
 WORD_TO_NUMBER_DE = {
