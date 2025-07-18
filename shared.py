@@ -1,4 +1,4 @@
 from threading import Lock
 
-shared_transcript = {"text": ""}
+shared_transcript = {"full_text": "", "current": ""}
 shared_lock = Lock()

@@ -68,8 +68,8 @@ def send_audio_stream(ws, stop_event, session_holder, session_ready):
 
 def poll_transcript():
     with shared_lock:
-        return shared_transcript["text"]
-
+        return shared_transcript.get("full_text", "") + shared_transcript.get("current", "")
+    
 def on_close(ws, close_status_code, close_msg):
     print(f"🔴 Connection closed: {close_status_code} - {close_msg}")
     stop_audio_stream()
@@ -134,32 +134,26 @@ def start_transcription(output_box=None):
         data = json.loads(message)
         msg_type = data.get("type", "")
 
-        if msg_type == "transcription_session.created":
+        if msg_type == "conversation.item.input_audio_transcription.delta":
+            # Partial transcript update
+            partial = data.get("delta", "")
+            with shared_lock:
+                shared_transcript["current"] += partial  # append partial text (delta might include leading space for new words)
+        
+        elif msg_type == "conversation.item.input_audio_transcription.completed":
+            # Final transcript for this utterance
+            transcript = data.get("transcript", "")
+            with shared_lock:
+                # Append final transcript to the log with a newline
+                shared_transcript["full_text"] += transcript + "\n"
+                shared_transcript["current"] = ""  # reset current partial text
+        
+        elif msg_type == "transcription_session.created":
+            print("🎙️ Session created:", data["session"]["id"])
             session_holder["id"] = data["session"]["id"]
-            print(f"🎙️ Session created: {session_holder['id']}")
-
             session_ready.set()
             stop_event.clear()
-
-            global audio_thread
-            audio_thread = threading.Thread(
-                target=send_audio_stream,
-                args=(ws, stop_event, session_holder, session_ready),
-                daemon=True
-            )
-            audio_thread.start()
-
-        elif msg_type == "input_audio_transcription":
-            text = data["input_audio_transcription"]["text"]
-            with shared_lock:
-                shared_transcript["text"] += " " + text.strip()
-            print(f"📝 {text}")
-
-        elif msg_type == "turn_start":
-            print("🔊 Turn started.")
-        elif msg_type == "turn_end":
-            print("🔇 Turn ended.")
-    
+        
     def on_open(ws):
         print("✅ Connected to OpenAI Realtime API")
 

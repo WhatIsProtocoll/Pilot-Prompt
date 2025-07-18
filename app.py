@@ -203,12 +203,13 @@ with gr.Blocks() as demo:
         start_button.click(fn=start, outputs=[live_output, status])
         stop_button.click(fn=stop, outputs=[live_output, status])
         """
+        timer = gr.Timer(1)
         live_output = gr.Textbox(
             label="Live Transcription",
             lines=10,
             interactive=False,
             value=poll_transcript,   # periodically call this function
-            every=1                  # every 1 second
+            every=timer                  # every 1 second
         )
         status = gr.Textbox(label="Status", interactive=False)
         start_button = gr.Button("Start Live Transcription")
@@ -216,9 +217,11 @@ with gr.Blocks() as demo:
 
         def start():
             with shared_lock:
-                shared_transcript["text"] = ""
-            start_transcription()
-            return "🔴 Listening..."
+                shared_transcript["full_text"] = ""
+                shared_transcript["current"] = ""
+            start_transcription()  # start the websocket + audio thread
+            return "🔴 Listening..."  # update status
+
 
         def stop():
             stop_audio_stream()
