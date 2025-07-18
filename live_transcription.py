@@ -14,6 +14,8 @@ load_dotenv()
 audio_thread = None
 ws_app = None
 stop_event = threading.Event()
+session_ready = threading.Event()
+
 
 API_KEY = os.getenv("OPENAI_API_KEY")
 if API_KEY is None:
@@ -27,6 +29,7 @@ HEADERS = [
 
 SAMPLE_RATE = 16000
 CHANNELS = 1
+sd.default.device = (1, None)  # Set input device (adjust index as needed)
 
 # Shared session holder (thread-safe via dict)
 session_holder = {"id": None}
@@ -40,7 +43,7 @@ def send_audio_stream(ws, stop_event, session_holder, session_ready):
         return
 
     def callback(indata, frames, time_info, status):
-        print(f"🔊 Captured {len(indata)} bytes of audio")
+        #print(f"🔊 Captured {len(indata)} bytes of audio")
         if status:
             print("Audio error:", status)
 
@@ -85,10 +88,15 @@ def stop_audio_stream():
 
     if audio_thread and audio_thread.is_alive():
         audio_thread.join()
+        audio_thread = None
         print("🛑 Audio thread stopped.")
 
     if ws_app:
-        ws_app.close()
+        try:
+            ws_app.close()
+        except Exception as e:
+            print("WebSocket close error:", e)
+        ws_app = None
         print("🛑 WebSocket closed.")
 
 def start_transcription(output_box=None):
@@ -131,18 +139,21 @@ def start_transcription(output_box=None):
             print("📩 Received:", data)
 
             """
+        global audio_thread
         data = json.loads(message)
         msg_type = data.get("type", "")
 
         if msg_type == "conversation.item.input_audio_transcription.delta":
             # Partial transcript update
             partial = data.get("delta", "")
+            print("PARTIAL:", partial)
             with shared_lock:
                 shared_transcript["current"] += partial  # append partial text (delta might include leading space for new words)
         
         elif msg_type == "conversation.item.input_audio_transcription.completed":
             # Final transcript for this utterance
             transcript = data.get("transcript", "")
+            print("FINAL:", transcript)
             with shared_lock:
                 # Append final transcript to the log with a newline
                 shared_transcript["full_text"] += transcript + "\n"
@@ -151,9 +162,23 @@ def start_transcription(output_box=None):
         elif msg_type == "transcription_session.created":
             print("🎙️ Session created:", data["session"]["id"])
             session_holder["id"] = data["session"]["id"]
-            session_ready.set()
             stop_event.clear()
-        
+            session_ready.clear()
+            session_ready.set()
+            if audio_thread is None or not audio_thread.is_alive():
+                audio_thread = threading.Thread(
+                    target=send_audio_stream,
+                    args=(ws, stop_event, session_holder, session_ready), 
+                    daemon=True)
+                audio_thread.start()
+                print("🎤 Audio thread started.")
+        elif msg_type == "turn_start":
+            print("🔊 Turn started.")
+        elif msg_type == "turn_end":
+            print("🔇 Turn ended.")
+        else:
+            # Optionally print other messages for debugging
+            print("📩 Received:", data)
     def on_open(ws):
         print("✅ Connected to OpenAI Realtime API")
 
@@ -163,7 +188,7 @@ def start_transcription(output_box=None):
             "session" : {
                 "input_audio_format": "pcm16",
                 "input_audio_transcription": {
-                    "model": "gpt-4o-mini-transcribe",
+                    "model": "gpt-4o-transcribe",
                     "prompt": "",
                     "language": "en"   # Explicit language
                 },
@@ -171,7 +196,7 @@ def start_transcription(output_box=None):
                     "type": "server_vad",
                     "threshold": 0.5,
                     "prefix_padding_ms": 300,
-                    "silence_duration_ms": 500
+                    "silence_duration_ms": 2000
                 },
                 "input_audio_noise_reduction": {
                     "type": "near_field"
@@ -192,5 +217,7 @@ def start_transcription(output_box=None):
         on_close=on_close,
         on_error=on_error
     )
-
-    threading.Thread(target=ws_app.run_forever, daemon=True).start()
+    
+    ws_app.run_forever()
+    stop_audio_stream()
+    #threading.Thread(target=ws_app.run_forever, daemon=True).start()

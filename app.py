@@ -219,7 +219,7 @@ with gr.Blocks() as demo:
             with shared_lock:
                 shared_transcript["full_text"] = ""
                 shared_transcript["current"] = ""
-            start_transcription()  # start the websocket + audio thread
+            start_transcription(live_output)  # start the websocket + audio thread
             return "🔴 Listening..."  # update status
 
 
