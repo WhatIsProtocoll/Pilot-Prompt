@@ -20,18 +20,6 @@ from live_transcription import start_transcription, stop_audio_stream, send_audi
 from shared import shared_transcript, shared_lock
 import sounddevice as sd
 
-""" 
-shared_transcript = {"text": ""}
-shared_lock = Lock()
-
-vad_model, utils = torch.hub.load(
-    repo_or_dir='snakers4/silero-vad',
-    model='silero_vad',
-    force_reload=False
-)
-(get_speech_timestamps, _, read_audio, _, _) = utils
-
- """
 sd.default.device = (1, None)  
 
 # Model setup
@@ -95,44 +83,6 @@ def process_input(audio, callsign, language):
 
     return transcription, extracted_cs, response
 
-""" 
-def live_stream(buffer_list, new_chunk):
-    if new_chunk is None:
-        return buffer_list, ""
-    sr, audio = new_chunk
-
-    if audio.ndim > 1:
-        audio = audio.mean(axis=1)
-    audio = librosa.resample(audio.astype(np.float32), orig_sr=sr, target_sr=16000)
-    buffer_list.append(audio)
-    buffer = np.concatenate(buffer_list)
-    if buffer.shape[0] > 15 * 16000:
-        buffer = buffer[-15 * 16000:]
-        buffer_list = [buffer]
-
-    # Use Silero VAD to extract speech intervals
-    speech_ts = get_speech_timestamps(buffer, vad_model, sampling_rate=16000)
-
-    full_text = ""
-    for seg in speech_ts:
-        start, end = seg['start'], seg['end']
-        chunk = buffer[start:end]
-
-        segments, _ = RTModel.transcribe(
-            chunk,
-            beam_size=1,
-            temperature=0,
-            no_speech_threshold=0.2,
-            condition_on_previous_text=False,
-            vad_filter=False,
-            language="en"
-        )
-        for s in segments:
-            full_text += s.text
-
-    return buffer_list, full_text
-
-"""
 
 # Fallback logic (e.g., GPT)
 def ml_fallback_handler(transcript, callsign):
@@ -154,55 +104,8 @@ def checklist_markdown(checklist_dict):
 with gr.Blocks() as demo:
     gr.Markdown("## ATCopilot – Radio Communication Assistant")
 
-    '''
-    Obsolete perhaps
-        with gr.Tab("Live ATC Log"):
-            state = gr.State(value=[])
-
-            with gr.Row():
-                with gr.Column():
-                    live_audio = gr.Audio(
-                        sources=["microphone"],
-                        type="numpy",
-                        label="🎙️ Live ATC Input"
-                    )
-                with gr.Column():
-                    live_output = gr.Textbox(
-                        label="Live Transcript / Log",
-                        lines=10,
-                        interactive=False
-                    )
-
-            # Setup streaming event
-            live_audio.stream(
-                fn=live_stream,      # not live_transcribe
-                inputs=[state, live_audio],
-                outputs=[state, live_output],
-                time_limit=600,
-                stream_every=1.0
-    )
-    '''
-
     with gr.Tab("Live Transcription"):
-        """
-        live_output = gr.Textbox(label="Live Transcription", lines=10)
-        start_button = gr.Button("Start Live Transcription")
-        stop_button = gr.Button("Stop")
-        status = gr.Textbox(label="Status")
 
-        def start():
-            start_transcription(live_output)
-            return gr.update(value="🔴 Listening..."), "🔴 Listening..."
-
-        def stop():
-            stop_audio_stream()
-            return gr.update(value="🔴 Stopped..."), "🔴 Stopped..."
-
-        status = gr.Textbox(label="Status")
-
-        start_button.click(fn=start, outputs=[live_output, status])
-        stop_button.click(fn=stop, outputs=[live_output, status])
-        """
         timer = gr.Timer(1)
         live_output = gr.Textbox(
             label="Live Transcription",

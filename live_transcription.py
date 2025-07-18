@@ -104,41 +104,6 @@ def start_transcription(output_box=None):
 
     def on_message_custom(ws, message):
 
-        """
-        data = json.loads(message)
-        msg_type = data.get("type", "")
-
-        if msg_type == "transcription_session.created":
-            session_holder["id"] = data["session"]["id"]
-            print(f"🎙️ Session created: {session_holder['id']}")
-
-            # Start audio stream directly after session creation (no second update needed)
-            session_ready.set()
-
-            stop_event.clear()
-            audio_thread = threading.Thread(
-                target=send_audio_stream,
-                args=(ws, stop_event, session_holder, session_ready),
-                daemon=True
-            )
-            audio_thread.start()
-
-        elif msg_type == "input_audio_transcription":
-            text = data["input_audio_transcription"]["text"]
-            if output_box is not None:
-                output_box.append(text)
-            else:
-                print(f"📝 {text}")
-
-        elif msg_type == "turn_start":
-            print("🔊 Turn started.")
-        elif msg_type == "turn_end":
-            print("🔇 Turn ended.")
-        else:
-            # Optionally print other messages for debugging
-            print("📩 Received:", data)
-
-            """
         global audio_thread
         data = json.loads(message)
         msg_type = data.get("type", "")
